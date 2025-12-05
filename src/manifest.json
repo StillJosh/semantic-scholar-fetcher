@@ -1,0 +1,15 @@
+{
+	"manifest_version": 2,
+	"name": "Semantic Scholar Fetcher",
+	"version": "1.0.0",
+	"description": "Fetch citation counts and metadata from Semantic Scholar",
+	"homepage_url": "https://github.com/StillJosh/semantic-scholar-fetcher",
+	"applications": {
+		"zotero": {
+			"id": "semantic-scholar-fetcher@zotero-plugins.org",
+			"update_url": "https://github.com/StillJosh/semantic-scholar-fetcher/releases/download/release/updates.json",
+			"strict_min_version": "7.0.0",
+			"strict_max_version": "7.*"
+		}
+	}
+}

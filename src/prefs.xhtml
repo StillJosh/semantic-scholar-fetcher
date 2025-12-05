@@ -1,0 +1,110 @@
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      xmlns:html="http://www.w3.org/1999/xhtml">
+
+	<groupbox>
+		<label><html:h2>General Settings</html:h2></label>
+		
+		<checkbox id="semantic-scholar-auto-fetch"
+			preference="extensions.zotero.semanticScholar.autoFetch"
+			label="Automatically fetch data for newly added items"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-update-on-startup"
+			preference="extensions.zotero.semanticScholar.updateOnStartup"
+			label="Update all items when Zotero starts"
+			native="true"/>
+	</groupbox>
+	
+	<groupbox>
+		<label><html:h2>Search Mode</html:h2></label>
+		<html:p style="margin: 0 0 10px 0; color: var(--fill-secondary);">
+			How to find papers on Semantic Scholar
+		</html:p>
+		
+		<radiogroup id="semantic-scholar-search-mode"
+			preference="extensions.zotero.semanticScholar.searchMode"
+			native="true">
+			<radio value="identifiers" label="Search by identifiers only (DOI, arXiv ID, PMID)"/>
+			<radio value="title" label="Fall back to exact title match if no identifier found"/>
+		</radiogroup>
+	</groupbox>
+	
+	<groupbox>
+		<label><html:h2>Citation Metrics</html:h2></label>
+		<html:p style="margin: 0 0 10px 0; color: var(--fill-secondary);">
+			Metrics displayed in the Semantic Scholar section (stored in Extra field)
+		</html:p>
+		
+		<checkbox id="semantic-scholar-fetch-citation-count"
+			label="Citation count (always enabled)"
+			disabled="true" checked="true"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-influential"
+			preference="extensions.zotero.semanticScholar.fetch.influentialCitationCount"
+			label="Influential citation count"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-reference"
+			preference="extensions.zotero.semanticScholar.fetch.referenceCount"
+			label="Reference count"
+			native="true"/>
+	</groupbox>
+	
+	<groupbox>
+		<label><html:h2>Field Overwrites</html:h2></label>
+		<html:p style="margin: 0 0 10px 0; color: var(--fill-secondary);">
+			These options fetch additional metadata from Semantic Scholar into Zotero fields
+		</html:p>
+		
+		<checkbox id="semantic-scholar-overwrite-existing"
+			preference="extensions.zotero.semanticScholar.overwriteExistingFields"
+			label="⚠️ Overwrite existing field values (if unchecked, only empty fields are filled)"
+			native="true"/>
+		
+		<html:hr style="margin: 10px 0; border: none; border-top: 1px solid var(--fill-quinary);"/>
+		
+		<checkbox id="semantic-scholar-fetch-doi"
+			preference="extensions.zotero.semanticScholar.fetch.DOI"
+			label="DOI"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-abstract"
+			preference="extensions.zotero.semanticScholar.fetch.abstract"
+			label="Abstract"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-date"
+			preference="extensions.zotero.semanticScholar.fetch.publicationDate"
+			label="Publication date"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-venue"
+			preference="extensions.zotero.semanticScholar.fetch.venue"
+			label="Venue/Journal"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-pdf"
+			preference="extensions.zotero.semanticScholar.fetch.openAccessPdf"
+			label="Open Access PDF URL"
+			native="true"/>
+	</groupbox>
+	
+	<groupbox>
+		<label><html:h2>Additional Metadata</html:h2></label>
+		<html:p style="margin: 0 0 10px 0; color: var(--fill-secondary);">
+			Additional information stored in the Extra field
+		</html:p>
+		
+		<checkbox id="semantic-scholar-fetch-arxiv"
+			preference="extensions.zotero.semanticScholar.fetch.arXivId"
+			label="arXiv ID (store in Extra field)"
+			native="true"/>
+		
+		<checkbox id="semantic-scholar-fetch-fields"
+			preference="extensions.zotero.semanticScholar.fetch.fieldsOfStudy"
+			label="Fields of Study (store in Extra field)"
+			native="true"/>
+	</groupbox>
+	
+</vbox>

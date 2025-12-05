@@ -1,0 +1,70 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v2.0.0, v2.1.0, etc.
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Verify version matches manifest
+        run: |
+          MANIFEST_VERSION=$(grep -o '"version": "[^"]*"' src/manifest.json | cut -d'"' -f4)
+          if [ "$MANIFEST_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+            echo "ERROR: Tag version (${{ steps.version.outputs.VERSION }}) doesn't match manifest version ($MANIFEST_VERSION)"
+            exit 1
+          fi
+
+      - name: Build XPI
+        run: |
+          cd src
+          zip -r ../semantic-scholar-fetcher-${{ steps.version.outputs.VERSION }}.xpi *
+
+      - name: Update updates.json with new version
+        run: |
+          cat > updates.json << 'EOF'
+          {
+            "addons": {
+              "semantic-scholar-fetcher@zotero-plugins.org": {
+                "updates": [
+                  {
+                    "version": "${{ steps.version.outputs.VERSION }}",
+                    "update_link": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/semantic-scholar-fetcher-${{ steps.version.outputs.VERSION }}.xpi",
+                    "applications": {
+                      "zotero": {
+                        "strict_min_version": "7.0",
+                        "strict_max_version": "7.*"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: semantic-scholar-fetcher-${{ steps.version.outputs.VERSION }}.xpi
+          generate_release_notes: true
+
+      - name: Update 'release' tag with updates.json
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: release
+          name: Latest Update Manifest
+          body: "This release contains the updates.json file for automatic plugin updates. Do not delete."
+          files: updates.json

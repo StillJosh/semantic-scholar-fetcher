@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euo pipefail
+
+# Get version from manifest.json
+VERSION=$(grep -o '"version": "[^"]*"' src/manifest.json | cut -d'"' -f4)
+
+rm -rf build
+mkdir build
+
+cd src
+zip -r ../build/semantic-scholar-fetcher-${VERSION}.xpi *
+cd ..
+
+# Also create a copy without version for easy installation
+cp build/semantic-scholar-fetcher-${VERSION}.xpi build/semantic-scholar-fetcher.xpi
+
+echo "Built semantic-scholar-fetcher-${VERSION}.xpi"
+echo ""
+echo "To install: Open Zotero -> Tools -> Add-ons -> Gear icon -> Install Add-on From File"
