@@ -407,47 +407,52 @@ var SemanticScholar = {
 		progressWin.changeHeadline("Fetching Semantic Scholar Data");
 		progressWin.show();
 		
-		// Batch fetch for items with known Scholar IDs
-		const { results: batchResults, rateLimited: batchRateLimited } = 
-			await this.batchFetchByScholarIds(regularItems);
-		
 		let successCount = 0;
 		let failCount = 0;
 		let rateLimitedCount = 0;
 		
-		// Apply batch results
-		for (const [itemId, data] of batchResults) {
-			const item = regularItems.find(i => i.id === itemId);
-			if (item) {
-				await this.applyDataToItem(item, data);
-				successCount++;
-			}
-		}
-		
-		// Process remaining items individually
-		const itemsToFetch = regularItems.filter(item => !batchResults.has(item.id));
-		this.log(`${batchResults.size} items updated via batch, ${itemsToFetch.length} remaining`);
-		
-		for (let i = 0; i < itemsToFetch.length; i++) {
-			const item = itemsToFetch[i];
+		try {
+			// Batch fetch for items with known Scholar IDs
+			const { results: batchResults, rateLimited: batchRateLimited } = 
+				await this.batchFetchByScholarIds(regularItems);
 			
-			progressWin.changeHeadline(`Processing ${i + 1}/${itemsToFetch.length}...`);
-			
-			const result = await this.fetchDataForItem(item);
-			
-			if (result.rateLimited) {
-				SemanticScholarAPI.addToRetryQueue(item);
-				rateLimitedCount++;
-			} else if (result.data) {
-				await this.applyDataToItem(item, result.data);
-				successCount++;
-			} else {
-				failCount++;
+			// Apply batch results
+			for (const [itemId, data] of batchResults) {
+				const item = regularItems.find(i => i.id === itemId);
+				if (item) {
+					await this.applyDataToItem(item, data);
+					successCount++;
+				}
 			}
 			
-			if (i < itemsToFetch.length - 1) {
-				await Zotero.Promise.delay(200);
+			// Process remaining items individually
+			const itemsToFetch = regularItems.filter(item => !batchResults.has(item.id));
+			this.log(`${batchResults.size} items updated via batch, ${itemsToFetch.length} remaining`);
+			
+			for (let i = 0; i < itemsToFetch.length; i++) {
+				const item = itemsToFetch[i];
+				
+				progressWin.changeHeadline(`Processing ${i + 1}/${itemsToFetch.length}...`);
+				
+				const result = await this.fetchDataForItem(item);
+				
+				if (result.rateLimited) {
+					SemanticScholarAPI.addToRetryQueue(item);
+					rateLimitedCount++;
+				} else if (result.data) {
+					await this.applyDataToItem(item, result.data);
+					successCount++;
+				} else {
+					failCount++;
+				}
+				
+				if (i < itemsToFetch.length - 1) {
+					await Zotero.Promise.delay(200);
+				}
 			}
+		} catch (e) {
+			this.log(`Error during batch fetch: ${e}`, 'error');
+			failCount = regularItems.length - successCount;
 		}
 		
 		let message = `Found: ${successCount}, Not found: ${failCount}`;
