@@ -337,6 +337,7 @@ var SemanticScholar = {
 	 */
 	async applyDataToItem(item, data) {
 		const overwriteExisting = this.getPref('overwriteExistingFields', false);
+		this.log(`overwriteExistingFields preference value: ${overwriteExisting}`);
 		await ItemUtils.applyDataToItem(
 			item, 
 			data, 

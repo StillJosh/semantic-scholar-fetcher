@@ -227,12 +227,23 @@ var ItemUtils = {
 		if (shouldFetchField('venue')) {
 			const venue = data.journal?.name || data.venue;
 			if (venue) {
-				const currentVenue = item.getField('publicationTitle');
+				// Different item types use different fields for venue/journal
+				const itemType = item.itemType;
+				let venueField = 'publicationTitle'; // default for journal articles
+				
+				if (itemType === 'conferencePaper') {
+					venueField = 'proceedingsTitle';
+				} else if (itemType === 'bookSection') {
+					venueField = 'bookTitle';
+				}
+				
+				const currentVenue = item.getField(venueField);
+				log(`Venue check: itemType=${itemType}, field=${venueField}, overwriteExisting=${overwriteExisting}, currentVenue="${currentVenue}", newVenue="${venue}"`);
 				if (overwriteExisting || !currentVenue) {
-					item.setField('publicationTitle', venue);
-					log(`Updated venue: ${venue}`);
+					item.setField(venueField, venue);
+					log(`Updated ${venueField}: ${venue}`);
 				} else {
-					log(`Skipped venue (field not empty): ${currentVenue}`);
+					log(`Skipped ${venueField} (field not empty): ${currentVenue}`);
 				}
 			}
 		}
