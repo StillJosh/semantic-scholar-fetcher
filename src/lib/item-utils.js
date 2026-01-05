@@ -70,70 +70,130 @@ var ItemUtils = {
 	},
 	
 	// ============================================
-	// Semantic Scholar Data in Extra Field
+	// Semantic Scholar Data Extra Note
 	// ============================================
 	
 	/**
-	 * Get citation count from item's Extra field
+	 * Get or create a hidden note for storing plugin data
+	 * @param {Object} item - Zotero item
+	 * @returns {Object|null} Note item or null
+	 */
+	_getStorageNote(item) {
+		if (!item || !item.isRegularItem()) return null;
+		
+		// Look for existing storage note
+		const notes = Zotero.Items.get(item.getNotes());
+		for (let note of notes) {
+			const noteText = note.getNote();
+			if (noteText.includes('<semantic-scholar-data>')) {
+				return note;
+			}
+		}
+		return null;
+	},
+	
+	/**
+	 * Get stored plugin data from item
+	 * @param {Object} item - Zotero item
+	 * @returns {Object|null} Parsed data or null
+	 */
+	_getStoredData(item) {
+		const note = this._getStorageNote(item);
+		if (!note) return null;
+		
+		const noteText = note.getNote();
+		const match = noteText.match(/<semantic-scholar-data>([\s\S]*?)<\/semantic-scholar-data>/);
+		if (!match) return null;
+		
+		try {
+			return JSON.parse(match[1]);
+		} catch (e) {
+			return null;
+		}
+	},
+	
+	/**
+	 * Store plugin data on item
+	 * @param {Object} item - Zotero item
+	 * @param {Object} data - Data to store
+	 */
+	async _setStoredData(item, data) {
+		if (!item || !item.isRegularItem()) return;
+		
+		let note = this._getStorageNote(item);
+		const jsonData = JSON.stringify(data);
+		const noteContent = `<semantic-scholar-data>${jsonData}</semantic-scholar-data>`;
+		
+		if (note) {
+			note.setNote(noteContent);
+			await note.saveTx();
+		} else {
+			note = new Zotero.Item('note');
+			note.libraryID = item.libraryID;
+			note.setNote(noteContent);
+			note.parentID = item.id;
+			await note.saveTx();
+		}
+	},
+	
+	/**
+	 * Get citation count from item data storage
 	 * @param {Object} item - Zotero item
 	 * @returns {string} Citation count or empty string
 	 */
 	getCitationCount(item) {
 		if (!item || !item.isRegularItem()) return "";
-		const extra = item.getField('extra');
-		if (!extra) return "";
-		const match = extra.match(/^Citation Count:\s*(\d+)/m);
-		return match ? match[1] : "";
+		const data = this._getStoredData(item);
+		if (!data) return "";
+		return data.citationCount !== undefined ? String(data.citationCount) : "";
 	},
 	
 	/**
-	 * Get influential citation count from item's Extra field
+	 * Get influential citation count from item data storage
 	 * @param {Object} item - Zotero item
 	 * @returns {string} Influential citation count or empty string
 	 */
 	getInfluentialCitationCount(item) {
 		if (!item || !item.isRegularItem()) return "";
-		const extra = item.getField('extra');
-		if (!extra) return "";
-		const match = extra.match(/^Influential Citation Count:\s*(\d+)/m);
-		return match ? match[1] : "";
+		const data = this._getStoredData(item);
+		if (!data) return "";
+		return data.influentialCitationCount !== undefined ? String(data.influentialCitationCount) : "";
 	},
 	
 	/**
-	 * Get reference count from item's Extra field
+	 * Get reference count from item data storage
 	 * @param {Object} item - Zotero item
 	 * @returns {string} Reference count or empty string
 	 */
 	getReferenceCount(item) {
 		if (!item || !item.isRegularItem()) return "";
-		const extra = item.getField('extra');
-		if (!extra) return "";
-		const match = extra.match(/^Reference Count:\s*(\d+)/m);
-		return match ? match[1] : "";
+		const data = this._getStoredData(item);
+		if (!data) return "";
+		return data.referenceCount !== undefined ? String(data.referenceCount) : "";
 	},
 	
 	/**
-	 * Get Semantic Scholar paper ID from item's Extra field
+	 * Get Semantic Scholar paper ID from item data storage
 	 * @param {Object} item - Zotero item
 	 * @returns {string|null} Scholar ID or null
 	 */
 	getScholarId(item) {
 		if (!item || !item.isRegularItem()) return null;
-		const extra = item.getField('extra') || "";
-		const match = extra.match(/^Semantic Scholar ID:\s*([a-f0-9]+)/im);
-		return match ? match[1] : null;
+		const data = this._getStoredData(item);
+		if (!data) return null;
+		return data.paperId || null;
 	},
 	
 	/**
-	 * Get last updated date from item's Extra field
+	 * Get last updated date from item data storage
 	 * @param {Object} item - Zotero item
 	 * @returns {string|null} Last updated date or null
 	 */
 	getLastUpdated(item) {
 		if (!item || !item.isRegularItem()) return null;
-		const extra = item.getField('extra') || "";
-		const match = extra.match(/^Semantic Scholar Updated:\s*(.+)$/im);
-		return match ? match[1] : null;
+		const data = this._getStoredData(item);
+		if (!data) return null;
+		return data.lastUpdated || null;
 	},
 	
 	// ============================================
@@ -151,46 +211,35 @@ var ItemUtils = {
 	async applyDataToItem(item, data, shouldFetchField, overwriteExisting, log) {
 		if (!item || !item.isRegularItem() || !data) return;
 		
-		let extra = item.getField('extra') || "";
-		
-		// Remove existing Semantic Scholar lines
-		extra = extra.replace(/^Citation Count:\s*\d+\n?/gm, "");
-		extra = extra.replace(/^Influential Citation Count:\s*\d+\n?/gm, "");
-		extra = extra.replace(/^Reference Count:\s*\d+\n?/gm, "");
-		extra = extra.replace(/^Semantic Scholar ID:\s*[a-f0-9]+\n?/gim, "");
-		extra = extra.replace(/^Semantic Scholar Updated:\s*.+\n?/gim, "");
-		extra = extra.replace(/^arXiv:\s*[\d.]+\n?/gim, "");
-		extra = extra.replace(/^Fields of Study:\s*.+\n?/gim, "");
-		
-		// Build new extra content for metrics
-		let newContent = "";
+		// Build object to store in item data (won't be exported)
+		const storedData = {};
 		
 		if (data.citationCount !== undefined) {
-			newContent += `Citation Count: ${data.citationCount}\n`;
+			storedData.citationCount = data.citationCount;
 		}
 		if (data.influentialCitationCount !== undefined && shouldFetchField('influentialCitationCount')) {
-			newContent += `Influential Citation Count: ${data.influentialCitationCount}\n`;
+			storedData.influentialCitationCount = data.influentialCitationCount;
 		}
 		if (data.referenceCount !== undefined && shouldFetchField('referenceCount')) {
-			newContent += `Reference Count: ${data.referenceCount}\n`;
+			storedData.referenceCount = data.referenceCount;
 		}
 		if (data.paperId) {
-			newContent += `Semantic Scholar ID: ${data.paperId}\n`;
+			storedData.paperId = data.paperId;
 		}
-		newContent += `Semantic Scholar Updated: ${new Date().toLocaleDateString()}\n`;
+		storedData.lastUpdated = new Date().toLocaleDateString();
 		
 		// Add arXiv ID if enabled
 		if (shouldFetchField('arXivId') && data.externalIds?.ArXiv) {
-			newContent += `arXiv: ${data.externalIds.ArXiv}\n`;
+			storedData.arXivId = data.externalIds.ArXiv;
 		}
 		
 		// Add fields of study if enabled
 		if (shouldFetchField('fieldsOfStudy') && data.fieldsOfStudy?.length) {
-			newContent += `Fields of Study: ${data.fieldsOfStudy.join(', ')}\n`;
+			storedData.fieldsOfStudy = data.fieldsOfStudy;
 		}
 		
-		extra = (newContent + extra).trim();
-		item.setField('extra', extra);
+		// Store data in hidden note (won't be exported)
+		await this._setStoredData(item, storedData);
 		
 		// Apply Zotero field overwrites based on preferences
 		// Only overwrite if overwriteExisting is true OR the field is empty
