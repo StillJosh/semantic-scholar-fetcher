@@ -1,5 +1,6 @@
 # Semantic Scholar Fetcher for Zotero
-
+<img width="1329" height="197" alt="image" src="https://github.com/user-attachments/assets/b22bcac9-1b7e-4c68-89e4-21620ad38ed5" />
+<br/><br/> 
 A Zotero 7 plugin that fetches citation counts and metadata from [Semantic Scholar](https://www.semanticscholar.org/).
 
 ## Features
