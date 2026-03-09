@@ -46,7 +46,12 @@ var ItemUtils = {
 		// Check URL
 		const url = item.getField('url') || "";
 		const urlMatch = url.match(/arxiv\.org\/abs\/(\d+\.\d+)/i);
-		return urlMatch ? urlMatch[1] : null;
+		if (urlMatch) return urlMatch[1];
+		
+		// Check DOI — arXiv preprints have DOIs in the form 10.48550/arXiv.XXXX.XXXXX
+		const doi = item.getField('DOI') || "";
+		const doiMatch = doi.match(/10\.48550\/arXiv\.(\d+\.\d+)/i);
+		return doiMatch ? doiMatch[1] : null;
 	},
 	
 	/**
