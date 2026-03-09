@@ -91,6 +91,18 @@
 	</groupbox>
 	
 	<groupbox>
+		<label><html:h2>Preprint Handling</html:h2></label>
+		<html:p style="margin: 0 0 10px 0; color: var(--fill-secondary);">
+			Automatically upgrade preprint items when Semantic Scholar finds a published journal version
+		</html:p>
+		
+		<checkbox id="semantic-scholar-preprint-conversion"
+			preference="extensions.zotero.semanticScholar.fetch.preprintConversion"
+			label="Convert preprint to journal article or conference paper (sets venue fields; always replaces \"ArXiv\" placeholder values even if \"Overwrite existing\" is off)"
+			native="true"/>
+	</groupbox>
+	
+	<groupbox>
 		<label><html:h2>Additional Metadata</html:h2></label>
 		<html:p style="margin: 0 0 10px 0; color: var(--fill-secondary);">
 			Additional information stored in the Extra field

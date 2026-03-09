@@ -13,6 +13,14 @@ const API_BASE_URL = "https://api.semanticscholar.org/graph/v1";
 // Test data based on provided BibTeX entries
 const TEST_PAPERS = [
 	{
+		name: "Lippe et al. PDE-Refiner 2023 (arXiv DOI)",
+		title: "PDE-Refiner: Achieving Accurate Long Rollouts with Neural PDE Solvers",
+		doi: "10.48550/arXiv.2308.05732",  // arXiv-style DOI — must be resolved via ARXIV: path
+		arxivId: "2308.05732",
+		year: 2023,
+		expectedToHaveCitations: true
+	},
+	{
 		name: "Gibbs & Candès NeurIPS 2021",
 		title: "Adaptive Conformal Inference Under Distribution Shift",
 		doi: null,
@@ -52,6 +60,57 @@ const TitleUtils = {
 		return norm1 === norm2;
 	}
 };
+
+// Unit test: arXiv ID extraction from DOI field (mirrors item-utils.js logic)
+function extractArxivIdFromDOI(doi) {
+	const match = (doi || "").match(/10\.48550\/arXiv\.(\d+\.\d+)/i);
+	return match ? match[1] : null;
+}
+
+function runUnitTests() {
+	console.log("==".repeat(30));
+	console.log("Unit Tests: arXiv ID extraction");
+	console.log("==".repeat(30));
+	
+	const cases = [
+		{ input: "10.48550/arXiv.2308.05732",   expected: "2308.05732" },
+		{ input: "10.48550/ARXIV.2308.05732",   expected: "2308.05732" }, // case-insensitive
+		{ input: "10.1016/J.JMVA.2021.104879",  expected: null },         // real publisher DOI
+		{ input: "",                             expected: null },
+		{ input: null,                           expected: null },
+	];
+	
+	let passed = 0, failed = 0;
+	for (const { input, expected } of cases) {
+		const result = extractArxivIdFromDOI(input);
+		const ok = result === expected;
+		console.log(`  ${ok ? "✓" : "✗"} extractArxivIdFromDOI(${JSON.stringify(input)}) => ${JSON.stringify(result)} (expected ${JSON.stringify(expected)})`);
+		ok ? passed++ : failed++;
+	}
+	
+	console.log(`\nUnit test results: ${passed} passed, ${failed} failed\n`);
+	return { passed, failed };
+}
+
+// Test: Fetch by arXiv ID
+async function testFetchByArxivId(arxivId) {
+	const url = `${API_BASE_URL}/paper/ARXIV:${encodeURIComponent(arxivId)}?fields=citationCount,title`;
+	
+	try {
+		const response = await fetch(url, {
+			headers: { "Accept": "application/json" }
+		});
+		
+		if (response.status !== 200) {
+			return { success: false, error: `HTTP ${response.status}` };
+		}
+		
+		const data = await response.json();
+		return { success: true, title: data.title, citationCount: data.citationCount };
+	} catch (error) {
+		return { success: false, error: error.message };
+	}
+}
 
 // Test: Fetch by DOI
 async function testFetchByDOI(doi) {
@@ -138,8 +197,11 @@ async function runTests() {
 	console.log("=".repeat(60));
 	console.log();
 	
-	let passed = 0;
-	let failed = 0;
+	// Unit tests first (no network needed)
+	const unitResults = runUnitTests();
+	
+	let passed = unitResults.passed;
+	let failed = unitResults.failed;
 	
 	for (const paper of TEST_PAPERS) {
 		console.log(`\nTesting: ${paper.name}`);
@@ -150,8 +212,8 @@ async function runTests() {
 		
 		let result;
 		
-		// Test by DOI if available
-		if (paper.doi) {
+		// Test by DOI if available (skip arXiv-style DOIs — they don't resolve via DOI path)
+		if (paper.doi && !paper.arxivId) {
 			console.log("  [DOI Lookup]");
 			result = await testFetchByDOI(paper.doi);
 			
@@ -164,7 +226,24 @@ async function runTests() {
 				failed++;
 			}
 			
-			// Wait to respect rate limits
+			await new Promise(resolve => setTimeout(resolve, 3000));
+		}
+		
+		// Test via arXiv ID — either explicit or extracted from arXiv-style DOI
+		const arxivId = paper.arxivId || (paper.doi ? (paper.doi.match(/10\.48550\/arXiv\.(\d+\.\d+)/i) || [])[1] : null);
+		if (arxivId) {
+			console.log(`  [arXiv ID Lookup: ${arxivId}]`);
+			result = await testFetchByArxivId(arxivId);
+			
+			if (result.success) {
+				console.log(`    ✓ Found paper: "${result.title}"`);
+				console.log(`    ✓ Citation count: ${result.citationCount}`);
+				passed++;
+			} else {
+				console.log(`    ✗ Failed: ${result.error}`);
+				failed++;
+			}
+			
 			await new Promise(resolve => setTimeout(resolve, 3000));
 		}
 		
@@ -192,7 +271,6 @@ async function runTests() {
 			failed++;
 		}
 		
-		// Wait to respect rate limits
 		await new Promise(resolve => setTimeout(resolve, 3000));
 	}
 	
@@ -206,12 +284,19 @@ async function runTests() {
 
 // Export for Node.js or run directly
 if (typeof module !== 'undefined' && module.exports) {
-	module.exports = { runTests, testFetchByDOI, testFetchByTitle, TEST_PAPERS };
+	module.exports = { runTests, testFetchByDOI, testFetchByArxivId, testFetchByTitle, TEST_PAPERS };
 }
 
-// Run if executed directly
-if (typeof require !== 'undefined' && require.main === module) {
+// Run if executed directly (Node.js or Deno)
+const isMain = (typeof require !== 'undefined' && require.main === module)
+	|| (typeof import.meta !== 'undefined' && import.meta.main);
+
+if (isMain || (typeof Deno !== 'undefined')) {
 	runTests().then(results => {
-		process.exit(results.failed > 0 ? 1 : 0);
+		if (typeof Deno !== 'undefined') {
+			Deno.exit(results.failed > 0 ? 1 : 0);
+		} else {
+			process.exit(results.failed > 0 ? 1 : 0);
+		}
 	});
 }

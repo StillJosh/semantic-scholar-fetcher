@@ -21,3 +21,6 @@ pref("extensions.zotero.semanticScholar.fetch.openAccessPdf", false);
 // Additional metadata (stored in Extra field)
 pref("extensions.zotero.semanticScholar.fetch.arXivId", false);
 pref("extensions.zotero.semanticScholar.fetch.fieldsOfStudy", false);
+
+// Preprint handling
+pref("extensions.zotero.semanticScholar.fetch.preprintConversion", false);

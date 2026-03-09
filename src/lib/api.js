@@ -28,6 +28,8 @@ var SemanticScholarAPI = {
 		openAccessPdf: { label: "Open Access PDF URL", type: "field", zoteroField: "url", default: false },
 		arXivId: { label: "arXiv ID", type: "extra", default: false },
 		fieldsOfStudy: { label: "Fields of Study", type: "extra", default: false },
+		// Preprint handling
+		preprintConversion: { label: "Convert preprint to journal article", type: "feature", default: false },
 	},
 	
 	/**
@@ -62,6 +64,7 @@ var SemanticScholarAPI = {
 		if (shouldFetchField('publicationDate')) fields.push('publicationDate');
 		if (shouldFetchField('venue')) fields.push('venue', 'journal');
 		if (shouldFetchField('openAccessPdf')) fields.push('openAccessPdf');
+		if (shouldFetchField('preprintConversion')) fields.push('journal', 'publicationTypes', 'publicationVenue', 'venue');
 		if (shouldFetchField('fieldsOfStudy')) fields.push('fieldsOfStudy');
 		
 		// Deduplicate

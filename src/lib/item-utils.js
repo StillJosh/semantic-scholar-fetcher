@@ -204,114 +204,173 @@ var ItemUtils = {
 	// ============================================
 	// Apply API Data to Items
 	// ============================================
-	
+
 	/**
-	 * Apply fetched Semantic Scholar data to a Zotero item
-	 * @param {Object} item - Zotero item
-	 * @param {Object} data - Data from Semantic Scholar API
-	 * @param {Function} shouldFetchField - Function to check if a field should be updated
-	 * @param {boolean} overwriteExisting - Whether to overwrite existing field values
-	 * @param {Function} log - Logging function
+	 * Returns true if the string is an ArXiv placeholder value ("ArXiv", "arxiv", etc.)
+	 * Used to treat such values as empty when deciding whether to overwrite.
+	 * @param {string} str
+	 * @returns {boolean}
 	 */
+	_isArxivPlaceholder(str) {
+		return /^arxiv$/i.test((str || '').trim());
+	},
+
+	/**
+	 * Resolve a real published venue from a Semantic Scholar API response.
+	 * Returns null if S2 only has ArXiv-level data (paper not yet indexed as published).
+	 *
+	 * Priority: publicationVenue.name > venue string > journal.name
+	 * All three sources are skipped if their value is the "ArXiv" placeholder.
+	 * Type ('journal' | 'conference') comes from publicationVenue.type when available,
+	 * falling back to publicationTypes — because S2 sometimes mis-classifies conference
+	 * papers as "JournalArticle" in publicationTypes.
+	 *
+	 * @param {Object} data - Semantic Scholar API response
+	 * @returns {{ name: string, type: 'journal'|'conference', pages: string|null, volume: string|null }|null}
+	 */
+	_resolvePublishedVenue(data) {
+		const pubVenueName  = data.publicationVenue?.name;
+		const venueStr      = typeof data.venue === 'string' ? data.venue : null;
+		const journalName   = data.journal?.name;
+
+		const name = (!this._isArxivPlaceholder(pubVenueName)  && pubVenueName)
+			|| (!this._isArxivPlaceholder(venueStr)   && venueStr)
+			|| (!this._isArxivPlaceholder(journalName) && journalName)
+			|| null;
+
+		if (!name) return null;
+
+		// Determine type — publicationVenue.type is most reliable
+		const rawType  = data.publicationVenue?.type?.toLowerCase();
+		const pubTypes = Array.isArray(data.publicationTypes) ? data.publicationTypes : [];
+		const type = rawType === 'conference' || (!rawType && pubTypes.includes('Conference'))
+			? 'conference'
+			: rawType === 'journal'  || (!rawType && pubTypes.includes('JournalArticle'))
+				? 'journal'
+				: null;
+
+		if (!type) return null;
+
+		// Only include volume/pages from journal when journal.name itself is real
+		const journalIsReal = !this._isArxivPlaceholder(journalName) && !!journalName;
+		return {
+			name,
+			type,
+			volume: (journalIsReal && data.journal?.volume) || null,
+			pages:  data.journal?.pages || null,
+		};
+	},
+
 	async applyDataToItem(item, data, shouldFetchField, overwriteExisting, log) {
 		if (!item || !item.isRegularItem() || !data) return;
-		
-		// Build object to store in item data (won't be exported)
+
+		// ── Stored metrics (hidden note, not exported) ────────────────────────
 		const storedData = {};
-		
-		if (data.citationCount !== undefined) {
-			storedData.citationCount = data.citationCount;
-		}
-		if (data.influentialCitationCount !== undefined && shouldFetchField('influentialCitationCount')) {
+		if (data.citationCount !== undefined) storedData.citationCount = data.citationCount;
+		if (data.influentialCitationCount !== undefined && shouldFetchField('influentialCitationCount'))
 			storedData.influentialCitationCount = data.influentialCitationCount;
-		}
-		if (data.referenceCount !== undefined && shouldFetchField('referenceCount')) {
+		if (data.referenceCount !== undefined && shouldFetchField('referenceCount'))
 			storedData.referenceCount = data.referenceCount;
-		}
-		if (data.paperId) {
-			storedData.paperId = data.paperId;
-		}
+		if (data.paperId) storedData.paperId = data.paperId;
 		storedData.lastUpdated = new Date().toLocaleDateString();
-		
-		// Add arXiv ID if enabled
-		if (shouldFetchField('arXivId') && data.externalIds?.ArXiv) {
+		if (shouldFetchField('arXivId') && data.externalIds?.ArXiv)
 			storedData.arXivId = data.externalIds.ArXiv;
-		}
-		
-		// Add fields of study if enabled
-		if (shouldFetchField('fieldsOfStudy') && data.fieldsOfStudy?.length) {
+		if (shouldFetchField('fieldsOfStudy') && data.fieldsOfStudy?.length)
 			storedData.fieldsOfStudy = data.fieldsOfStudy;
-		}
-		
-		// Store data in hidden note (won't be exported)
 		await this._setStoredData(item, storedData);
-		
-		// Apply Zotero field overwrites based on preferences
-		// Only overwrite if overwriteExisting is true OR the field is empty
+
+		// ── Preprint / arXiv-sourced item conversion ──────────────────────────
+		// Triggers for: Zotero preprint type, or journal/conference items whose
+		// venue field still holds the "ArXiv" placeholder from the import.
+		// NOTE: "ArXiv" placeholder values are always overwritten here, regardless
+		// of overwriteExisting — they are never considered real publication data.
+		if (shouldFetchField('preprintConversion')) {
+			const venueField = item.itemType === 'conferencePaper' ? 'proceedingsTitle' : 'publicationTitle';
+			const isArxivSourced = item.itemType === 'preprint'
+				|| ((item.itemType === 'journalArticle' || item.itemType === 'conferencePaper')
+					&& this._isArxivPlaceholder(item.getField(venueField)));
+
+			if (isArxivSourced) {
+				const venue = this._resolvePublishedVenue(data);
+				if (!venue) {
+					log(`Preprint conversion skipped: no published venue found in S2 data`);
+				} else if (venue.type === 'journal') {
+					log(`Converting to journalArticle (journal: ${venue.name})`);
+					item.setType(Zotero.ItemTypes.getID('journalArticle'));
+					item.setField('publicationTitle', venue.name);
+					if (venue.volume && (overwriteExisting || !item.getField('volume')))
+						item.setField('volume', venue.volume);
+					if (venue.pages && (overwriteExisting || !item.getField('pages')))
+						item.setField('pages', venue.pages);
+				} else {
+					log(`Converting to conferencePaper (proceedings: ${venue.name})`);
+					item.setType(Zotero.ItemTypes.getID('conferencePaper'));
+					item.setField('proceedingsTitle', venue.name);
+					if (venue.pages && (overwriteExisting || !item.getField('pages')))
+						item.setField('pages', venue.pages);
+				}
+			}
+		}
+
+		// ── Individual field overwrites (user-configurable) ───────────────────
 		if (shouldFetchField('DOI') && data.externalIds?.DOI) {
-			const currentDOI = item.getField('DOI');
-			if (overwriteExisting || !currentDOI) {
+			const cur = item.getField('DOI');
+			if (overwriteExisting || !cur) {
 				item.setField('DOI', data.externalIds.DOI);
-				log(`Set DOI field to: ${data.externalIds.DOI}`);
+				log(`Set DOI: ${data.externalIds.DOI}`);
 			} else {
-				log(`Skipped DOI (field not empty): ${currentDOI}`);
+				log(`Skipped DOI (not empty): ${cur}`);
 			}
 		}
-		
+
 		if (shouldFetchField('abstract') && data.abstract) {
-			const currentAbstract = item.getField('abstractNote');
-			if (overwriteExisting || !currentAbstract) {
+			const cur = item.getField('abstractNote');
+			if (overwriteExisting || !cur) {
 				item.setField('abstractNote', data.abstract);
-				log("Updated abstract");
+				log('Updated abstract');
 			} else {
-				log("Skipped abstract (field not empty)");
+				log('Skipped abstract (not empty)');
 			}
 		}
-		
+
 		if (shouldFetchField('publicationDate') && data.publicationDate) {
-			const currentDate = item.getField('date');
-			if (overwriteExisting || !currentDate) {
+			const cur = item.getField('date');
+			if (overwriteExisting || !cur) {
 				item.setField('date', data.publicationDate);
 				log(`Updated date: ${data.publicationDate}`);
 			} else {
-				log(`Skipped date (field not empty): ${currentDate}`);
+				log(`Skipped date (not empty): ${cur}`);
 			}
 		}
-		
+
 		if (shouldFetchField('venue')) {
-			const venue = data.journal?.name || data.venue;
+			// Use _resolvePublishedVenue so ArXiv placeholder values are never written
+			const venue = this._resolvePublishedVenue(data);
 			if (venue) {
-				// Different item types use different fields for venue/journal
-				const itemType = item.itemType;
-				let venueField = 'publicationTitle'; // default for journal articles
-				
-				if (itemType === 'conferencePaper') {
-					venueField = 'proceedingsTitle';
-				} else if (itemType === 'bookSection') {
-					venueField = 'bookTitle';
-				}
-				
-				const currentVenue = item.getField(venueField);
-				log(`Venue check: itemType=${itemType}, field=${venueField}, overwriteExisting=${overwriteExisting}, currentVenue="${currentVenue}", newVenue="${venue}"`);
-				if (overwriteExisting || !currentVenue) {
-					item.setField(venueField, venue);
-					log(`Updated ${venueField}: ${venue}`);
+				const venueField = item.itemType === 'conferencePaper' ? 'proceedingsTitle'
+					: item.itemType === 'bookSection' ? 'bookTitle'
+					: 'publicationTitle';
+				const cur = item.getField(venueField);
+				log(`Venue check: field=${venueField}, current="${cur}", new="${venue.name}"`);
+				if (overwriteExisting || !cur || this._isArxivPlaceholder(cur)) {
+					item.setField(venueField, venue.name);
+					log(`Updated ${venueField}: ${venue.name}`);
 				} else {
-					log(`Skipped ${venueField} (field not empty): ${currentVenue}`);
+					log(`Skipped ${venueField} (not empty): ${cur}`);
 				}
 			}
 		}
-		
+
 		if (shouldFetchField('openAccessPdf') && data.openAccessPdf?.url) {
-			const currentUrl = item.getField('url');
-			if (overwriteExisting || !currentUrl) {
+			const cur = item.getField('url');
+			if (overwriteExisting || !cur) {
 				item.setField('url', data.openAccessPdf.url);
-				log(`Updated URL to open access PDF: ${data.openAccessPdf.url}`);
+				log(`Updated URL: ${data.openAccessPdf.url}`);
 			} else {
-				log(`Skipped URL (field not empty): ${currentUrl}`);
+				log(`Skipped URL (not empty): ${cur}`);
 			}
 		}
-		
+
 		await item.saveTx();
 		log(`Applied data to "${item.getField('title')}"`);
 	}
